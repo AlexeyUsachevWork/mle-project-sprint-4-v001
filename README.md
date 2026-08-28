@@ -57,16 +57,103 @@ jupyter lab --ip=0.0.0.0 --no-browser
 
 # Расчёт рекомендаций
 
-Код для выполнения первой части проекта находится в файле `recommendations.ipynb`. Изначально, это шаблон. Используйте его для выполнения первой части проекта.
+Код для выполнения офлайн-части проекта находится в файле `recommendations.ipynb`.
 
-# Сервис рекомендаций
+После этапа 3 в каталоге `recsys/recommendations/` должны быть файлы:
+- `top_popular.parquet`
+- `personal_als.parquet`
+- `similar.parquet`
+- `recommendations.parquet`
 
-Код сервиса рекомендаций находится в файле `recommendations_service.py`.
+И в `recsys/data/`:
+- `items.parquet`
+- `events.parquet`
 
-<*укажите здесь необходимые шаги для запуска сервиса рекомендаций*>
+Если файлов нет локально, скачайте их из персонального S3-бакета (пути те же, что в ноутбуке).
 
-# Инструкции для тестирования сервиса
+# Сервис рекомендаций (этап 4)
 
-Код для тестирования сервиса находится в файле `test_service.py`.
+Код микросервисов находится в каталоге `app/`:
 
-<*укажите здесь необходимые шаги для тестирования сервиса рекомендаций*>
+| Файл | Порт | Назначение |
+|------|------|------------|
+| `app/events_service.py` | 8020 |  |
+| `app/features_service.py` | 8010 | Feature Store (`similar.parquet`) |
+| `app/recommendations_service.py` | 8000 | Офлайн/онлайн/blended рекомендации |
+
+Точки входа в корне репозитория (для совместимости с заданием):
+- `recommendations_service.py`
+- `test_service.py`
+
+## Стратегия смешивания online и offline
+
+1. **Offline** (`/recommendations_offline`): персональные рекомендации из `recommendations.parquet`; если пользователя нет — `top_popular.parquet`.
+2. **Online** (`/recommendations_online`): берём последние 3 события из Event Store, для каждого запрашиваем похожие треки в Feature Store, сортируем по `score`, удаляем дубликаты.
+3. **Blended** (`/recommendations`): чередуем online и offline (`online[0], offline[0], online[1], offline[1], ...`), добавляем хвосты более длинного списка, снова dedup, обрезаем до `k`.
+
+Так свежая онлайн-история попадает в выдачу раньше, а офлайн-профиль дополняет список.
+
+## Запуск сервисов
+
+Активируйте venv и установите зависимости (см. выше). Запускайте команды **из корня репозитория**.
+
+### Вариант 1 — скрипт (рекомендуется)
+
+Сервисы стартуют **последовательно** (сначала Feature Store, затем Recommendation Store), чтобы не перегружать RAM при загрузке parquet. Первый запуск может занять несколько минут; скрипт ждёт `/health` на каждом порту (до 10 минут).
+
+Windows (PowerShell):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start_services.ps1
+```
+
+Linux/macOS:
+
+```bash
+bash scripts/start_services.sh
+```
+
+Остановка:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\stop_services.ps1
+```
+
+```bash
+bash scripts/stop_services.sh
+```
+
+### Вариант 2 — вручную (3 терминала)
+
+```bash
+uvicorn app.events_service:app --host 127.0.0.1 --port 8020
+uvicorn app.features_service:app --host 127.0.0.1 --port 8010
+uvicorn app.recommendations_service:app --host 127.0.0.1 --port 8000
+```
+
+# Тестирование сервиса
+
+Скрипт тестов: `app/test_service.py` (обёртка в корне: `test_service.py`).
+
+Три сценария:
+1. пользователь без персональных рекомендаций (`user_id=999999999`);
+2. пользователь с персональными рекомендациями, без онлайн-истории (`user_id=4`);
+3. тот же пользователь после записи онлайн-событий через Event Store.
+
+Запуск (сервисы должны быть подняты):
+
+```bash
+python test_service.py > test_service.log
+```
+
+Проверка лога:
+
+```bash
+type test_service.log    # Windows
+cat test_service.log     # Linux
+```
+
+Документация API после запуска:
+- http://127.0.0.1:8000/docs
+- http://127.0.0.1:8010/docs
+- http://127.0.0.1:8020/docs
