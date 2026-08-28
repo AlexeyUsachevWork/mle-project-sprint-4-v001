@@ -13,9 +13,9 @@ if [[ ! -x "$PYTHON" ]]; then
   PYTHON="python3"
 fi
 
-# Проверяем артефакты этапа 3 до старта
-"$PYTHON" -c "from app.paths import check_artifacts; m=check_artifacts(); import sys; sys.exit(1 if m else 0)" \
-  || { echo "Сначала подготовьте recsys/recommendations/*.parquet"; exit 1; }
+# Скачиваем отсутствующие parquet из S3, затем проверяем артефакты этапа 3
+"$PYTHON" -c "from app.s3_storage import ensure_artifacts; ensure_artifacts(); print('artifacts ok')" \
+  || { echo "Не удалось подготовить recsys/recommendations/*.parquet (этап 3 или S3 / .env.local)"; exit 1; }
 
 PID_FILE="${ROOT}/scripts/.service_pids.txt"
 : > "$PID_FILE"

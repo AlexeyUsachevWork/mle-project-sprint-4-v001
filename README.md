@@ -69,7 +69,25 @@ jupyter lab --ip=0.0.0.0 --no-browser
 - `items.parquet`
 - `events.parquet`
 
-Если файлов нет локально, скачайте их из персонального S3-бакета (пути те же, что в ноутбуке).
+Если файлов нет локально, скрипт `scripts/start_services.*` **автоматически скачает** нужные для сервисов parquet из персонального S3-бакета (ключи в `.env.local`, пути те же, что в ноутбуке). Вручную:
+
+```bash
+python -m app.s3_storage
+```
+
+Для микросервисов нужны только:
+- `recsys/recommendations/recommendations.parquet`
+- `recsys/recommendations/top_popular.parquet`
+- `recsys/recommendations/similar.parquet`
+
+Файл `.env.local` (не коммитится) должен содержать:
+
+```
+S3_BUCKET_NAME=...
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+MLFLOW_S3_ENDPOINT_URL=https://storage.yandexcloud.net
+```
 
 # Сервис рекомендаций (этап 4)
 
@@ -98,6 +116,8 @@ jupyter lab --ip=0.0.0.0 --no-browser
 Активируйте venv и установите зависимости (см. выше). Запускайте команды **из корня репозитория**.
 
 ### Вариант 1 — скрипт (рекомендуется)
+
+Перед стартом скрипт вызывает `app.s3_storage.ensure_artifacts()`: отсутствующие parquet скачиваются из S3 (нужен `.env.local` с ключами).
 
 Сервисы стартуют **последовательно** (сначала Feature Store, затем Recommendation Store), чтобы не перегружать RAM при загрузке parquet. Первый запуск может занять несколько минут; скрипт ждёт `/health` на каждом порту (до 10 минут).
 

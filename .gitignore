@@ -169,3 +169,7 @@ cython_debug/
 
 # project environment
 env_recsys_start/
+
+# runtime service scripts
+scripts/.service_pids.txt
+scripts/uvicorn_*.log

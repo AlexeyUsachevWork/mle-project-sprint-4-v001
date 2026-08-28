@@ -13,10 +13,10 @@ if (-not (Test-Path $Python)) {
     $Python = "python"
 }
 
-# Проверяем артефакты этапа 3 до старта (иначе recommendations упадёт на lifespan)
-& $Python -c "from app.paths import check_artifacts; m=check_artifacts(); import sys; print('missing:', m) if m else print('artifacts ok'); sys.exit(1 if m else 0)"
+# Скачиваем отсутствующие parquet из S3, затем проверяем артефакты этапа 3
+& $Python -c "from app.s3_storage import ensure_artifacts; ensure_artifacts(); print('artifacts ok')"
 if ($LASTEXITCODE -ne 0) {
-    throw "Сначала подготовьте recsys/recommendations/*.parquet (этап 3 или скачайте из S3)."
+    throw "Не удалось подготовить recsys/recommendations/*.parquet (этап 3 или S3 / .env.local)."
 }
 
 $PidFile = Join-Path $Root "scripts\.service_pids.txt"
